@@ -112,6 +112,19 @@ export const serviceBusSubscription: AppBlock = {
         frequency: { interval: 30, unit: "seconds" },
       },
       async onTrigger(input: EntityInput) {
+        const status = input.block.lifecycle?.status;
+
+        // If failed, attempt recovery by triggering sync (validates connection)
+        if (status === "failed") {
+          await lifecycle.sync();
+          return;
+        }
+
+        // Skip polling if block is not ready
+        if (status !== "ready") {
+          return;
+        }
+
         const connectionString = input.app.config.connectionString as string;
         const queueName = input.block.config.queueName as string;
         const maxMessages = (input.block.config.maxMessages as number) || 10;
@@ -148,19 +161,16 @@ export const serviceBusSubscription: AppBlock = {
           }
 
           await receiver.close();
-
-          // Trigger sync if block was previously in failed state
-          if (input.block.lifecycle?.status === "failed") {
-            await lifecycle.sync();
-          }
         } catch (error) {
+          console.error(
+            `Failed to poll: ${error instanceof Error ? error.message : "Unknown error"}`,
+          );
+
           // Update last check time even on error
           await kv.block.set({ key: KV_LAST_CHECK_TIME, value: checkTime });
 
-          // Trigger sync if block was previously ready
-          if (input.block.lifecycle?.status === "ready") {
-            await lifecycle.sync();
-          }
+          // Trigger sync to update status to failed
+          await lifecycle.sync();
         } finally {
           if (client) {
             await client.close().catch((err) => {

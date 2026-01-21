@@ -15,7 +15,7 @@
  * 3. Export it for type safety and external use
  */
 
-import { serviceBusQueue } from "./serviceBusQueue";
+import { serviceBusSubscription } from "./serviceBusSubscription";
 
 /**
  * Dictionary of all available blocks
@@ -23,8 +23,8 @@ import { serviceBusQueue } from "./serviceBusQueue";
  * Value: block definition
  */
 export const blocks = {
-  serviceBusQueue: serviceBusQueue,
+  serviceBusSubscription: serviceBusSubscription,
 } as const;
 
 // Named exports for individual blocks (optional, for external imports)
-export { serviceBusQueue };
+export { serviceBusSubscription };

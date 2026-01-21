@@ -1,5 +1,5 @@
 /**
- * Block Registry for {{APP_NAME}}
+ * Block Registry for Azure Toolkit
  *
  * This file exports all blocks as a dictionary for easy registration.
  *
@@ -15,7 +15,7 @@
  * 3. Export it for type safety and external use
  */
 
-import { exampleBlock } from "./exampleBlock";
+import { serviceBusQueue } from "./serviceBusQueue";
 
 /**
  * Dictionary of all available blocks
@@ -23,10 +23,8 @@ import { exampleBlock } from "./exampleBlock";
  * Value: block definition
  */
 export const blocks = {
-  example: exampleBlock,
-  // Add more blocks here:
-  // myNewBlock: myNewBlock,
+  serviceBusQueue: serviceBusQueue,
 } as const;
 
 // Named exports for individual blocks (optional, for external imports)
-export { exampleBlock };
+export { serviceBusQueue };

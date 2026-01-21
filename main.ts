@@ -2,26 +2,30 @@ import { defineApp } from "@slflows/sdk/v1";
 import { blocks } from "./blocks/index";
 
 export const app = defineApp({
-  name: "{{APP_NAME}}",
-  installationInstructions:
-    "{{APP_DESCRIPTION}}\n\nTo install:\n1. Add your API key\n2. Configure the base URL if needed\n3. Start using the blocks in your flows",
+  name: "Azure Toolkit",
 
   blocks,
 
   config: {
-    apiKey: {
-      name: "API Key",
-      description: "Your service API key",
+    connectionString: {
+      name: "Connection String",
+      description: "Azure Service Bus namespace connection string",
       type: "string",
       required: true,
       sensitive: true,
     },
-    baseUrl: {
-      name: "Base URL",
-      description: "API base URL",
-      type: "string",
-      required: false,
-      default: "https://api.example.com",
-    },
+
+    // NOTE in a future phase we'll switch to passwordless and read from Azure OIDC app.
+    // accessToken: {
+    //   name: "Azure Access Token",
+    //   description: "Access token from Azure OIDC app",
+    //   type: "string",
+    //   required: true,
+    //   sensitive: true,
+    // },
   },
+
+  installationInstructions: `Get the connection string from the *Service Bus Namespace Settings*, under the *Shared Access Policies* tab.`,
+  // NOTE in a future phase we'll switch to passwordless and read from Azure OIDC app.
+  // installationInstructions: `Get the token from the Azure OIDC app for the \`management\` service using a signal reference like \`ref("signal.azureOidc.accessTokens").management\`.`,
 });

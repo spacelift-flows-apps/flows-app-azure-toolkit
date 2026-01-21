@@ -1,85 +1,106 @@
-# {{APP_NAME}} - Flows App
+# Azure Toolkit - Flows App
 
 For general app development guidance, see @../CLAUDE.md
 
 ## Overview
 
-{{APP_DESCRIPTION}}
+This Flows app provides blocks to interact with Azure services. Currently, it
+exposes a **Service Bus Queue Reader** block that reads messages from an Azure
+Service Bus queue on demand.
 
-This app demonstrates the standard patterns for Flows apps:
+The app uses a connection string to authenticate with Azure Service Bus. The
+long-term plan is to move to a passwordless approach using Azure OIDC.
 
-- Clean configuration schema with secrets support
-- Simple block structure with proper error handling
-- Type-safe implementation with TypeScript
-- Comprehensive CI/CD pipeline
+Reference: https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-dotnet-get-started-with-queues?tabs=connection-string
 
 ## Architecture
 
 ### App Structure
 
 ```text
-{{app_name}}/
+flows-app-azure-toolkit/
 ├── blocks/                   # Block implementations
 │   ├── index.ts              # Block registry and exports
-│   └── exampleBlock.ts       # Example block implementation
+│   └── serviceBusQueue.ts    # Service Bus Queue Reader block
 ├── .github/workflows/ci.yml  # CI/CD pipeline
-├── main.ts                   # App definition
+├── main.ts                   # App definition and configuration
 ├── package.json              # Dependencies and scripts
 ├── tsconfig.json             # TypeScript configuration
-└── README.md                 # Documentation and setup guide
+└── README.md                 # User documentation
 ```
 
 ### Key Components
 
-#### Configuration (`main.ts`)
+#### App Configuration (`main.ts`)
 
-The app requires two configuration values:
+The app requires one configuration value:
 
-- `apiKey` (secret) - API authentication key
-- `baseUrl` (text) - API endpoint URL with default value
+- `connectionString` (secret) - Azure Service Bus namespace connection string
 
-#### Block Organization (`blocks/`)
+#### Block: Service Bus Queue Reader (`blocks/serviceBusQueue.ts`)
 
-The template uses a clean block organization pattern:
+Reads messages from an Azure Service Bus queue when triggered.
 
-- **`blocks/index.ts`** - Central registry that exports all blocks as a dictionary
-- **`blocks/exampleBlock.ts`** - Example block implementation
-- **`main.ts`** - Imports blocks via `Object.values(blocks)` for clean registration
+**Block Configuration:**
 
-**Example Block Features:**
+- `queueName` - Name of the queue to read from
 
-- Accepts a text message as input
-- Uses the configured API key and base URL
-- Returns a processed result or throws errors
-- Follows standard error handling patterns
+**Input:** Any event triggers message retrieval
+
+**Output:**
+
+- `status` - "connected" or "error"
+- `checkedAt` - ISO timestamp
+- `message` - Received message object or null if queue is empty
+
+**Behavior:**
+
+- Reads one message per trigger event
+- Completes (acknowledges) the message after reading
+- Returns null for message if queue is empty
+- Gracefully handles connection errors
 
 ## Implementation Patterns
 
 ### Block Structure
 
 ```typescript
-const exampleBlock: AppBlock = {
-  name: "Block Name",
-  description: "What this block does",
-  category: "Category",
+export const serviceBusQueue: AppBlock = {
+  name: "Service Bus Queue Reader",
+  description: "Reads messages from an Azure Service Bus queue on demand.",
+  category: "Azure",
+
+  config: {
+    queueName: {
+      name: "Queue Name",
+      description: "Name of the Service Bus queue to read messages from",
+      type: "string",
+      required: true,
+    },
+  },
 
   inputs: {
     default: {
-      name: "Input Name",
-      description: "Input description",
-      config: {
-        /* JSON Schema */
-      },
-      onEvent: async (input, { events }) => {
-        // Block logic with error handling
+      name: "Read Messages",
+      description: "Trigger message retrieval.",
+      config: {},
+      async onEvent(input: EntityInput) {
+        // Access app config
+        const connectionString = input.app.config.connectionString as string;
+        // Access block config
+        const queueName = input.block.config.queueName as string;
+
+        // ... implementation
+        await events.emit({ status, checkedAt, message });
       },
     },
   },
 
   outputs: {
     default: {
-      name: "Output Name",
-      description: "Output description",
+      name: "Queue Message",
+      description: "Result of the read operation",
+      default: true,
       type: {
         /* JSON Schema */
       },
@@ -88,19 +109,43 @@ const exampleBlock: AppBlock = {
 };
 ```
 
-### Error Handling Pattern
+### Service Bus Client Pattern
 
 ```typescript
-// Block logic - just throw errors, don't wrap in success/failure objects
-const result = await someOperation();
-await events.emit(result);
+let client: ServiceBusClient | null = null;
+
+try {
+  client = new ServiceBusClient(connectionString);
+  const receiver = client.createReceiver(queueName);
+
+  const messages = await receiver.receiveMessages(1, {
+    maxWaitTimeInMs: 1000,
+  });
+
+  if (messages.length > 0) {
+    // Process message
+    await receiver.completeMessage(messages[0]);
+  }
+
+  await receiver.close();
+} finally {
+  if (client) {
+    await client.close().catch(() => {});
+  }
+}
 ```
 
-### Configuration Access
+### Error Handling
+
+The block emits events for both success and error cases rather than throwing:
 
 ```typescript
-const apiKey = input.app.config.apiKey as string;
-const baseUrl = input.app.config.baseUrl as string;
+try {
+  // ... operations
+  await events.emit({ status: "connected", checkedAt, message });
+} catch (error) {
+  await events.emit({ status: "error", checkedAt, message: null });
+}
 ```
 
 ## Development Workflow
@@ -112,49 +157,13 @@ const baseUrl = input.app.config.baseUrl as string;
 3. **Format**: `npm run format`
 4. **Bundle**: `npm run bundle`
 
-### Release Process
+### Testing with flowctl
 
-1. **Develop**: Make changes and test locally
-2. **Commit**: Push to feature branch
-3. **Review**: Create PR, wait for CI validation
-4. **Release**: Tag with `v1.0.0` format
-5. **Deploy**: CI automatically creates release and updates registry
+Use `flowctl` watch mode to test the app:
 
-### CI/CD Pipeline
-
-The template includes a complete CI/CD system:
-
-- **Quality Gates**: Type checking, formatting validation
-- **Automated Releases**: Tag-triggered GitHub releases
-- **Version Registry**: Self-maintaining `versions.json`
-- **Branch Protection**: Main branch protected, requires CI
-
-## Best Practices
-
-### Code Organization
-
-- Modular block structure in `blocks/` directory
-- Central block registry for easy management
-- Clear separation of concerns
-- Comprehensive type definitions
-
-### Error Handling
-
-- Let errors bubble up naturally - don't catch and wrap them
-- Use descriptive error messages
-- The framework will handle error catching and reporting
-
-### Security
-
-- Use `secret: true` for sensitive configuration
-- Never log sensitive data
-- Validate all inputs
-
-### Documentation
-
-- Clear block names and descriptions
-- Comprehensive README
-- Type annotations for all interfaces
+1. Configure app with a valid connection string
+2. Configure block with a queue name
+3. Send trigger events and verify output
 
 ## Extension Guidelines
 
@@ -162,10 +171,7 @@ The template includes a complete CI/CD system:
 
 1. Create block file in `blocks/` directory (e.g., `blocks/myBlock.ts`)
 2. Import and add to `blocks` dictionary in `blocks/index.ts`
-3. Export from `blocks/index.ts` for external use
-4. Test with `npm run typecheck`
-
-**Example:**
+3. Test with `npm run typecheck`
 
 ```typescript
 // blocks/myBlock.ts
@@ -174,22 +180,19 @@ export const myBlock: AppBlock = {
 };
 
 // blocks/index.ts
-import { myBlock } from "./myBlock.ts";
+import { myBlock } from "./myBlock";
 export const blocks = {
-  example: exampleBlock,
-  my: myBlock, // Add here
+  serviceBusQueue: serviceBusQueue,
+  myBlock: myBlock,
 } as const;
 ```
 
-### Adding Configuration
+### Adding App Configuration
 
 1. Update config schema in `main.ts`
 2. Access via `input.app.config.fieldName`
 
-### Adding Dependencies
+### Dependencies
 
-1. Add to package.json dependencies
-2. Import in relevant files
-3. Ensure TypeScript types are available
-
-This template provides a solid foundation for building production-ready Flows apps with modern development practices and automated deployment.
+The app uses `@azure/service-bus` for Service Bus operations. Add new Azure SDK
+packages to `package.json` as needed.

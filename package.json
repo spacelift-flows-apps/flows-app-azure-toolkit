@@ -1,6 +1,7 @@
 {
   "type": "module",
   "dependencies": {
+    "@azure/service-bus": "^7.9.5",
     "@slflows/sdk": "^0.0.8",
     "typescript": "^5.8.3"
   },

@@ -61,7 +61,6 @@ export const serviceBusSubscription: AppBlock = {
       // Peek to validate connection without consuming messages
       await receiver.peekMessages(1);
       await receiver.close();
-      await client.close();
 
       // Read stored timestamps
       const [lastCheck, lastReceived] = await kv.block.getMany([

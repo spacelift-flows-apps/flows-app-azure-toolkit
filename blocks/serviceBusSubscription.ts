@@ -191,11 +191,7 @@ export const serviceBusSubscription: AppBlock = {
         properties: {
           body: {
             type: "any",
-            description: "Message body (parsed JSON if valid, otherwise raw)",
-          },
-          rawBody: {
-            type: "string",
-            description: "Original message body as string",
+            description: "Message body",
           },
           messageId: {
             type: "string",
@@ -234,25 +230,15 @@ export const serviceBusSubscription: AppBlock = {
 function parseMessage(
   message: ServiceBusReceivedMessage,
 ): Record<string, unknown> {
-  let rawBody: string;
-  if (typeof message.body === "string") {
-    rawBody = message.body;
-  } else if (Buffer.isBuffer(message.body)) {
-    rawBody = message.body.toString("utf-8");
-  } else {
-    rawBody = JSON.stringify(message.body);
-  }
-
   let body: unknown;
-  try {
-    body = JSON.parse(rawBody);
-  } catch {
-    body = rawBody;
+  if (Buffer.isBuffer(message.body)) {
+    body = message.body.toString("utf-8");
+  } else {
+    body = message.body
   }
 
   return {
-    body,
-    rawBody,
+    body: body,
     messageId: message.messageId || "",
     enqueuedTime: message.enqueuedTimeUtc?.toISOString() || "",
     sequenceNumber: message.sequenceNumber?.toString() || "",

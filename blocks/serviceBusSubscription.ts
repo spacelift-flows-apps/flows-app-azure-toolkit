@@ -24,7 +24,7 @@ export const serviceBusSubscription: AppBlock = {
     maxMessages: {
       name: "Max Messages per Poll",
       description:
-        "Maximum number of messages to receive per poll cycle (default: 10)",
+        "Maximum number of messages to receive per poll cycle (default: 10, max: 2047)",
       type: "number",
       required: false,
     },

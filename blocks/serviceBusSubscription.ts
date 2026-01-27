@@ -3,6 +3,7 @@ import {
   ServiceBusClient,
   ServiceBusReceivedMessage,
 } from "@azure/service-bus";
+import { createServiceBusClient, AppConfig } from "./auth";
 
 // KV keys for tracking
 const KV_LAST_CHECK_TIME = "lastCheckTime";
@@ -49,13 +50,12 @@ export const serviceBusSubscription: AppBlock = {
   },
 
   async onSync(input: EntityInput) {
-    const connectionString = input.app.config.connectionString as string;
     const queueName = input.block.config.queueName as string;
 
     let client: ServiceBusClient | null = null;
 
     try {
-      client = new ServiceBusClient(connectionString);
+      client = createServiceBusClient(input.app.config as AppConfig);
       const receiver = client.createReceiver(queueName);
 
       // Peek to validate connection without consuming messages
@@ -76,10 +76,21 @@ export const serviceBusSubscription: AppBlock = {
         },
       };
     } catch (error) {
+      let errorMessage = "Connection failed";
+      if (error instanceof AggregateError) {
+        const messages = error.errors.map((e) =>
+          e instanceof Error ? e.message : String(e),
+        );
+        errorMessage = `AggregateError: ${messages.join("; ")}`;
+        console.error("AggregateError details:", messages);
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+        console.error("Error:", errorMessage);
+      }
+
       return {
         newStatus: "failed",
-        customStatusDescription:
-          error instanceof Error ? error.message : "Connection failed",
+        customStatusDescription: errorMessage,
       };
     } finally {
       if (client) {
@@ -124,7 +135,6 @@ export const serviceBusSubscription: AppBlock = {
           return;
         }
 
-        const connectionString = input.app.config.connectionString as string;
         const queueName = input.block.config.queueName as string;
         const maxMessages = (input.block.config.maxMessages as number) || 10;
         const receiveTimeoutSeconds =
@@ -134,7 +144,7 @@ export const serviceBusSubscription: AppBlock = {
         let client: ServiceBusClient | null = null;
 
         try {
-          client = new ServiceBusClient(connectionString);
+          client = createServiceBusClient(input.app.config as AppConfig);
           const receiver = client.createReceiver(queueName);
 
           const receivedMessages = await receiver.receiveMessages(maxMessages, {
@@ -234,7 +244,7 @@ function parseMessage(
   if (Buffer.isBuffer(message.body)) {
     body = message.body.toString("utf-8");
   } else {
-    body = message.body
+    body = message.body;
   }
 
   return {

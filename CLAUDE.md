@@ -8,10 +8,14 @@ This Flows app provides blocks to interact with Azure services. It exposes:
 
 - **Service Bus Queue Subscription** - Polls for messages on a customizable schedule
 
-The app uses a connection string to authenticate with Azure Service Bus. The
-long-term plan is to move to a passwordless approach using Azure OIDC.
+The app uses **passwordless OIDC authentication** via access tokens from the Azure OIDC app.
+It requires the service principal to have the **Azure Service Bus Data Receiver** role
+assigned on the namespace or specific queue.
 
-Reference: https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-dotnet-get-started-with-queues?tabs=connection-string
+References:
+
+- https://learn.microsoft.com/en-us/azure/service-bus-messaging/service-bus-dotnet-get-started-with-queues?tabs=passwordless
+- https://learn.microsoft.com/en-us/azure/service-bus-messaging/authenticate-application#overview
 
 ## Architecture
 
@@ -20,6 +24,7 @@ Reference: https://learn.microsoft.com/en-us/azure/service-bus-messaging/service
 ```text
 flows-app-azure-toolkit/
 ├── blocks/                                 # Block implementations
+│   ├── auth.ts                             # Authentication utilities (StaticTokenCredential)
 │   ├── index.ts                            # Block registry and exports
 │   └── serviceBusSubscription.ts           # Service Bus Queue Subscription
 ├── cmd/                                    # Go test utilities
@@ -36,9 +41,22 @@ flows-app-azure-toolkit/
 
 #### App Configuration (`main.ts`)
 
-The app requires one configuration value:
+The app requires the following configuration values:
 
-- `connectionString` (secret) - Azure Service Bus namespace connection string
+- `namespace` - Fully qualified Service Bus namespace (e.g., `my-namespace.servicebus.windows.net`)
+- `accessToken` (secret) - Access token with scope `https://servicebus.azure.net/.default`
+- `accessTokenExpiry` (optional) - Unix timestamp in milliseconds when the token expires
+
+**Typical configuration using Azure OIDC app signals:**
+
+- Namespace: `my-namespace.servicebus.windows.net`
+- Access Token: `=signals.azureOidc.accessTokens.sb`
+- Access Token Expiry: `=signals.azureOidc.expiresAt`
+
+#### Authentication (`blocks/auth.ts`)
+
+Provides a `StaticTokenCredential` that wraps pre-fetched access tokens for use with Azure SDK clients.
+The `createServiceBusClient` function creates a `ServiceBusClient` using token-based authentication.
 
 #### Block: Service Bus Queue Subscription (`blocks/serviceBusSubscription.ts`)
 
@@ -64,7 +82,7 @@ Polls an Azure Service Bus queue on a customizable schedule. Emits one event per
 
 **Output:** Message object (one event emitted per message)
 
-- `body`, `rawBody`, `messageId`, `enqueuedTime`, `sequenceNumber`, `contentType`, `correlationId`, `applicationProperties`
+- `body`, `messageId`, `enqueuedTime`, `sequenceNumber`, `contentType`, `correlationId`, `applicationProperties`
 
 **Behavior:**
 
@@ -142,10 +160,13 @@ export const serviceBusSubscription: AppBlock = {
 ### Service Bus Client Pattern
 
 ```typescript
+import { createServiceBusClient, AppConfig } from "./auth";
+
 let client: ServiceBusClient | null = null;
 
 try {
-  client = new ServiceBusClient(connectionString);
+  // Create client using token-based authentication
+  client = createServiceBusClient(input.app.config as AppConfig);
   const receiver = client.createReceiver(queueName);
 
   const messages = await receiver.receiveMessages(maxMessages, {
@@ -169,6 +190,28 @@ try {
   }
 }
 ```
+
+### Static Token Credential Pattern
+
+The app uses a custom `TokenCredential` implementation that wraps pre-fetched access tokens:
+
+```typescript
+class StaticTokenCredential implements TokenCredential {
+  constructor(
+    private token: string,
+    private expiresOnTimestamp: number,
+  ) {}
+
+  async getToken(): Promise<AccessToken> {
+    return {
+      token: this.token,
+      expiresOnTimestamp: this.expiresOnTimestamp,
+    };
+  }
+}
+```
+
+This allows using access tokens obtained from the Azure OIDC app with Azure SDK clients.
 
 ### Lifecycle Status Updates from Scheduled Triggers
 
@@ -198,10 +241,15 @@ if (input.block.lifecycle?.status === "failed") {
 
 Use `flowctl` watch mode to test the app:
 
-1. Configure app with a valid connection string
-2. Configure block with a queue name
-3. Use `cmd/sender` to send test messages
-4. Verify messages are polled and emitted as events
+1. Install and configure the Azure OIDC app with `sb` service enabled
+2. Configure this app with:
+   - Namespace: `my-namespace.servicebus.windows.net`
+   - Access Token: `=signals.azureOidc.accessTokens.sb`
+   - Access Token Expiry: `signals.azureOidc.expiresAt`
+3. Ensure the service principal has **Azure Service Bus Data Receiver** role on the namespace
+4. Configure block with a queue name
+5. Use `cmd/sender` to send test messages
+6. Verify messages are polled and emitted as events
 
 ## Extension Guidelines
 

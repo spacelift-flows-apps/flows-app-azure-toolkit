@@ -28,6 +28,7 @@ export const serviceBusSubscription: AppBlock = {
         "Maximum number of messages to receive per poll cycle (default: 10, max: 2047)",
       type: "number",
       required: false,
+      default: 10,
     },
     receiveTimeoutSeconds: {
       name: "Receive Timeout (seconds)",
@@ -51,6 +52,13 @@ export const serviceBusSubscription: AppBlock = {
 
   async onSync(input: EntityInput) {
     const queueName = input.block.config.queueName as string;
+    const maxMessages = input.block.config.maxMessages as number | undefined;
+
+    if (maxMessages !== undefined && maxMessages > 2047) {
+      console.log(
+        `Max messages per poll (${maxMessages}) exceeds the limit and will be truncated to 2047`,
+      );
+    }
 
     let client: ServiceBusClient | null = null;
 
@@ -136,7 +144,10 @@ export const serviceBusSubscription: AppBlock = {
         }
 
         const queueName = input.block.config.queueName as string;
-        const maxMessages = (input.block.config.maxMessages as number) || 10;
+        const maxMessages = Math.min(
+          (input.block.config.maxMessages as number) || 10,
+          2047,
+        );
         const receiveTimeoutSeconds =
           (input.block.config.receiveTimeoutSeconds as number) || 5;
 

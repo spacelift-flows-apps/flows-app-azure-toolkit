@@ -1,13 +1,9 @@
-import { AppBlock, EntityInput, events, kv, lifecycle } from "@slflows/sdk/v1";
+import { AppBlock, EntityInput, events, lifecycle } from "@slflows/sdk/v1";
 import {
   ServiceBusClient,
   ServiceBusReceivedMessage,
 } from "@azure/service-bus";
 import { createServiceBusClient, AppConfig } from "./auth";
-
-// KV keys for tracking
-const KV_LAST_CHECK_TIME = "lastCheckTime";
-const KV_LAST_MESSAGE_RECEIVED_TIME = "lastMessageReceivedTime";
 
 export const serviceBusSubscription: AppBlock = {
   name: "Service Bus Subscription",
@@ -39,17 +35,6 @@ export const serviceBusSubscription: AppBlock = {
     },
   },
 
-  signals: {
-    lastCheckTime: {
-      name: "Last Check Time",
-      description: "ISO timestamp of the last poll attempt",
-    },
-    lastMessageReceivedTime: {
-      name: "Last Message Received",
-      description: "ISO timestamp of when a message was last received",
-    },
-  },
-
   async onSync(input: EntityInput) {
     const queueName = input.block.config.queueName as string;
     const maxMessages = input.block.config.maxMessages as number | undefined;
@@ -70,18 +55,8 @@ export const serviceBusSubscription: AppBlock = {
       await receiver.peekMessages(1);
       await receiver.close();
 
-      // Read stored timestamps
-      const [lastCheck, lastReceived] = await kv.block.getMany([
-        KV_LAST_CHECK_TIME,
-        KV_LAST_MESSAGE_RECEIVED_TIME,
-      ]);
-
       return {
         newStatus: "ready",
-        signalUpdates: {
-          lastCheckTime: lastCheck?.value || null,
-          lastMessageReceivedTime: lastReceived?.value || null,
-        },
       };
     } catch (error) {
       let errorMessage = "Connection failed";
@@ -110,14 +85,8 @@ export const serviceBusSubscription: AppBlock = {
   },
 
   async onDrain() {
-    await kv.block.delete([KV_LAST_CHECK_TIME, KV_LAST_MESSAGE_RECEIVED_TIME]);
-
     return {
       newStatus: "drained",
-      signalUpdates: {
-        lastCheckTime: null,
-        lastMessageReceivedTime: null,
-      },
     };
   },
 
@@ -151,7 +120,6 @@ export const serviceBusSubscription: AppBlock = {
         const receiveTimeoutSeconds =
           (input.block.config.receiveTimeoutSeconds as number) || 5;
 
-        const checkTime = new Date().toISOString();
         let client: ServiceBusClient | null = null;
 
         try {
@@ -162,22 +130,10 @@ export const serviceBusSubscription: AppBlock = {
             maxWaitTimeInMs: receiveTimeoutSeconds * 1000,
           });
 
-          // Update last check time
-          await kv.block.set({ key: KV_LAST_CHECK_TIME, value: checkTime });
-
-          // Emit one event per message, complete each after processing
-          if (receivedMessages.length > 0) {
-            const receiveTime = new Date().toISOString();
-            await kv.block.set({
-              key: KV_LAST_MESSAGE_RECEIVED_TIME,
-              value: receiveTime,
-            });
-
-            for (const message of receivedMessages) {
-              const parsedMessage = parseMessage(message);
-              await receiver.completeMessage(message);
-              await events.emit(parsedMessage);
-            }
+          for (const message of receivedMessages) {
+            const parsedMessage = parseMessage(message);
+            await receiver.completeMessage(message);
+            await events.emit(parsedMessage);
           }
 
           await receiver.close();
@@ -185,9 +141,6 @@ export const serviceBusSubscription: AppBlock = {
           console.error(
             `Failed to poll: ${error instanceof Error ? error.message : "Unknown error"}`,
           );
-
-          // Update last check time even on error
-          await kv.block.set({ key: KV_LAST_CHECK_TIME, value: checkTime });
 
           // Trigger sync to update status to failed
           await lifecycle.sync();

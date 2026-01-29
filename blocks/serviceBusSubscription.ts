@@ -138,12 +138,9 @@ export const serviceBusSubscription: AppBlock = {
 
           await receiver.close();
         } catch (error) {
-          console.error(
-            `Failed to poll: ${error instanceof Error ? error.message : "Unknown error"}`,
-          );
-
           // Trigger sync to update status to failed
           await lifecycle.sync();
+          throw error;
         } finally {
           if (client) {
             await client.close().catch((err) => {

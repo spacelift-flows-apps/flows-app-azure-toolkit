@@ -32,17 +32,7 @@ export const app = defineApp({
     },
   },
 
-  async onSync(input) {
-    const namespace = input.app.config.namespace as string;
-    const accessToken = input.app.config.accessToken as string;
-
-    if (!namespace || !accessToken) {
-      return {
-        newStatus: "failed",
-        customStatusDescription: "Namespace and access token are required",
-      };
-    }
-
+  async onSync() {
     return {
       newStatus: "ready",
     };

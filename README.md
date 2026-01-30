@@ -1,11 +1,11 @@
 # Azure Toolkit App
 
-This Flows app provides blocks for interacting with Azure services using passwordless OIDC authentication.
+This Flows app provides higher-level blocks for interacting with Azure services using passwordless OIDC authentication.
 
 ## Features
 
-- **Service Bus Queue Subscription**: Continuously poll queues for messages on a customizable schedule
-- **Passwordless Authentication**: Uses access tokens from the Azure OIDC app (no connection strings)
+- **Service Bus Subscription**: Continuously poll queues for messages on a customizable schedule
+- **Passwordless Authentication**: Uses access tokens from the Azure OIDC app
 
 ## Prerequisites
 
@@ -38,18 +38,19 @@ az role assignment create \
 
 ### Azure OIDC App
 
-This app requires the **Azure OIDC** app to be installed and configured with the `sb` (Service Bus) service enabled. The OIDC app provides the access tokens needed for authentication.
+The **Azure OIDC** Flows app provides a way to access up-to-date access tokens required for authentication.
 
 ## Quick Start
 
-1. **Install the Azure OIDC App** and configure it with `sb` in the Services array
+1. **Install the Azure OIDC App** and configure it with the Service Bus in the Services config map.
+   - E.g.: `{"servicebus": "https://servicebus.azure.net"}`
 
 2. **Install this App** with the following configuration:
    - `Namespace`: Your fully qualified namespace (e.g., `my-namespace.servicebus.windows.net`)
-   - `Access Token`: Reference the OIDC app's token: `=signals.azureOidc.accessTokens.sb`
+   - `Access Token`: Reference the OIDC app's token: `=signals.azureOidc.accessTokens.servicebus`
    - `Access Token Expiry`: Reference the OIDC app's expiry: `signals.azureOidc.expiresAt`
 
-3. **Add a Service Bus Queue Subscription Block**:
+3. **Add a Service Bus Subscription Block**:
    - Configure the `queueName` for the queue you want to subscribe to
    - Optionally configure `maxMessages` and `receiveTimeoutSeconds`
    - Messages are polled on a customizable schedule and emitted as events
@@ -64,7 +65,7 @@ This app requires the **Azure OIDC** app to be installed and configured with the
 
 ## Blocks
 
-### Service Bus Queue Subscription
+### Service Bus Subscription
 
 Subscribes to an Azure Service Bus queue and polls for messages on a customizable schedule. Emits one event per message received.
 
@@ -76,11 +77,6 @@ Subscribes to an Azure Service Bus queue and polls for messages on a customizabl
 
 **Schedule**: Polls every 30 seconds by default (customizable via UI)
 
-**Signals**:
-
-- `lastCheckTime`: ISO timestamp of the last poll attempt
-- `lastMessageReceivedTime`: ISO timestamp of when a message was last received
-
 **Output**: One event emitted per message received (no events if queue is empty)
 
 - `body`: Message body (parsed JSON if valid, otherwise raw string)
@@ -90,14 +86,3 @@ Subscribes to an Azure Service Bus queue and polls for messages on a customizabl
 - `contentType`: Content type of the message
 - `correlationId`: Correlation ID for request-response patterns
 - `applicationProperties`: Custom application properties
-
-## How It Works
-
-- **OIDC Token Authentication**: Uses access tokens from the Azure OIDC app for passwordless authentication
-- **Lifecycle Status**: Block status reflects connection health (`ready` or `failed`)
-- **Message Completion**: Successfully read messages are completed (removed from queue) automatically
-- **Token Refresh**: When using expressions to reference OIDC app signals, tokens are automatically kept up to date
-
-## Next Steps
-
-- Support **Service Bus Topics**

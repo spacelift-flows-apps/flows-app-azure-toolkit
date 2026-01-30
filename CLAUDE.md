@@ -6,7 +6,7 @@ For general app development guidance, see @../CLAUDE.md
 
 This Flows app provides blocks to interact with Azure services. It exposes:
 
-- **Service Bus Queue Subscription** - Polls for messages on a customizable schedule
+- **Service Bus Subscription** - Polls for messages on a customizable schedule
 
 The app uses **passwordless OIDC authentication** via access tokens from the Azure OIDC app.
 It requires the service principal to have the **Azure Service Bus Data Receiver** role
@@ -50,15 +50,15 @@ The app requires the following configuration values:
 **Typical configuration using Azure OIDC app signals:**
 
 - Namespace: `my-namespace.servicebus.windows.net`
-- Access Token: `=signals.azureOidc.accessTokens.sb`
-- Access Token Expiry: `=signals.azureOidc.expiresAt`
+- Access Token: `=signals.azureOidc.accessTokens.servicebus`
+- Access Token Expiry: `signals.azureOidc.expiresAt`
 
 #### Authentication (`blocks/auth.ts`)
 
 Provides a `StaticTokenCredential` that wraps pre-fetched access tokens for use with Azure SDK clients.
 The `createServiceBusClient` function creates a `ServiceBusClient` using token-based authentication.
 
-#### Block: Service Bus Queue Subscription (`blocks/serviceBusSubscription.ts`)
+#### Block: Service Bus Subscription (`blocks/serviceBusSubscription.ts`)
 
 Polls an Azure Service Bus queue on a customizable schedule. Emits one event per message.
 
@@ -73,12 +73,7 @@ Polls an Azure Service Bus queue on a customizable schedule. Emits one event per
 **Lifecycle:**
 
 - `onSync` - Validates connection by peeking messages, returns `ready` or `failed` status
-- `onDrain` - Cleans up KV storage
-
-**Signals:**
-
-- `lastCheckTime` - ISO timestamp of the last poll attempt
-- `lastMessageReceivedTime` - ISO timestamp of when a message was last received
+- `onDrain` - Returns `drained` status
 
 **Output:** Message object (one event emitted per message)
 
@@ -91,7 +86,7 @@ Polls an Azure Service Bus queue on a customizable schedule. Emits one event per
 - Emits one event per message received
 - No events emitted if queue is empty
 - Completes (acknowledges) each message after processing
-- Triggers lifecycle sync when connection status changes
+- Triggers lifecycle sync on error or when recovering from failed status
 
 ## Implementation Patterns
 
@@ -115,23 +110,12 @@ export const serviceBusSubscription: AppBlock = {
     },
   },
 
-  signals: {
-    lastCheckTime: {
-      /* ... */
-    },
-    lastMessageReceivedTime: {
-      /* ... */
-    },
-  },
-
   async onSync(input: EntityInput) {
     // Validate connection, return ready/failed status
-    // Read timestamps from KV and return as signalUpdates
   },
 
   async onDrain() {
-    // Clean up KV storage
-    // Return drained status with null signals
+    // Return drained status
   },
 
   schedules: {
@@ -143,8 +127,8 @@ export const serviceBusSubscription: AppBlock = {
         frequency: { interval: 30, unit: "seconds" },
       },
       async onTrigger(input: EntityInput) {
-        // Receive messages, update KV timestamps
-        // Emit events, trigger lifecycle.sync() on status change
+        // Receive messages, emit events
+        // Trigger lifecycle.sync() on error or when recovering
       },
     },
   },
@@ -215,16 +199,12 @@ This allows using access tokens obtained from the Azure OIDC app with Azure SDK 
 
 ### Lifecycle Status Updates from Scheduled Triggers
 
-The scheduled `onTrigger` cannot directly return lifecycle status. Instead:
-
-1. Store state in KV during `onTrigger`
-2. Call `lifecycle.sync()` to trigger `onSync`
-3. `onSync` reads KV and returns appropriate `newStatus` and `signalUpdates`
+The scheduled `onTrigger` cannot directly return lifecycle status. Instead, call `lifecycle.sync()` to trigger `onSync` which validates the connection and returns the appropriate status.
 
 ```typescript
-// In onTrigger - trigger sync when connection status changes
+// In onTrigger - trigger sync when recovering from failed status
 if (input.block.lifecycle?.status === "failed") {
-  await lifecycle.sync(); // Will run onSync to update to ready
+  await lifecycle.sync(); // Will run onSync to validate and update status
 }
 ```
 
@@ -241,10 +221,10 @@ if (input.block.lifecycle?.status === "failed") {
 
 Use `flowctl` watch mode to test the app:
 
-1. Install and configure the Azure OIDC app with `sb` service enabled
+1. Install and configure the Azure OIDC app with `servicebus` service enabled
 2. Configure this app with:
    - Namespace: `my-namespace.servicebus.windows.net`
-   - Access Token: `=signals.azureOidc.accessTokens.sb`
+   - Access Token: `=signals.azureOidc.accessTokens.servicebus`
    - Access Token Expiry: `signals.azureOidc.expiresAt`
 3. Ensure the service principal has **Azure Service Bus Data Receiver** role on the namespace
 4. Configure block with a queue name

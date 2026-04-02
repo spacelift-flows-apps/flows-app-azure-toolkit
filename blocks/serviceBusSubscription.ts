@@ -10,6 +10,7 @@ export const serviceBusSubscription: AppBlock = {
   description:
     "Subscribes to an Azure Service Bus queue and polls for messages on a schedule.",
   category: "Azure",
+  entrypoint: true,
 
   config: {
     queueName: {
@@ -161,8 +162,9 @@ export const serviceBusSubscription: AppBlock = {
         type: "object",
         properties: {
           body: {
-            type: "any",
+            type: "object",
             description: "Message body",
+            additionalProperties: true,
           },
           messageId: {
             type: "string",

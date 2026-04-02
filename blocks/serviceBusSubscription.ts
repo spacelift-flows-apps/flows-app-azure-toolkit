@@ -162,7 +162,9 @@ export const serviceBusSubscription: AppBlock = {
         type: "object",
         properties: {
           body: {
+            type: "object",
             description: "Message body",
+            additionalProperties: true,
           },
           messageId: {
             type: "string",
